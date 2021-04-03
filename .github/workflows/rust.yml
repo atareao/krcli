@@ -34,10 +34,18 @@ jobs:
     - name: Build
       run: cargo build --verbose --all --release
 
-    - name: Release
-      uses: softprops/action-gh-release@v1
-      with:
-        files: |
-          target/release/krcli
+    - name: Bump version and push tag/create release point
+      uses: anothrNick/github-tag-action@1.17.2
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        WITH_V: true
+      id: bump_version
+
+    - name: Release
+      uses:svenstaro/upload-release-action@v1-release 
+      with:
+        repo_token: ${{ secrets.GITHUB_TOKEN }}
+        file: target/release/krcli
+        asset_name: krcli-linux-amd64
+        tag: ${{ steps.bump_version.outputs.new_tag }}
+        overwrite: true
