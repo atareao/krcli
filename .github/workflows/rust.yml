@@ -12,6 +12,34 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
+  build_for_linux:
+    name: Linux
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: checkout
+        uses: actions/checkout@master
+
+      - name: intall libdbus
+        run: |
+          sudo apt update
+          sudo apt install libdbus-1-dev
+
+      - name: Build
+        uses: actions-rs/cargo@v1
+        with:
+          command: build
+          args: --release
+
+      - name: Rename binary
+        run: mv target/release/krcli krcli-linux-amd64
+
+      - name: Upload to release
+        uses: JasonEtco/upload-to-release@d648f1babf776de9cad881320bd9e9818fc3b262
+        with:
+          args: krcli-linux-amd64 application/octet-stream
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
   build:
     runs-on: ubuntu-latest
 
