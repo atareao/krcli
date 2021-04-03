@@ -28,4 +28,8 @@ jobs:
       run: cargo test --verbose
     - name: Rust Release binary
       uses: Douile/rust-build.action@v0.1.26
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        RUSTTARGET: ${{ matrix.target }}
+        EXTRA_FILES: "README.md LICENSE"
 
