@@ -8,7 +8,7 @@ fn main(){
         .author(env!("CARGO_PKG_AUTHORS"))
         .about(env!("CARGO_PKG_DESCRIPTION"))
         .subcommand(SubCommand::with_name("get")
-            .help("get the value for a key")
+            .about("Get the value for a key")
             .arg(
                 Arg::with_name("key")
                     .short("k")
@@ -26,7 +26,7 @@ fn main(){
             )
         )
         .subcommand(SubCommand::with_name("set")
-            .help("set the value for a key")
+            .about("Set or update the value for a key")
             .arg(
                 Arg::with_name("key")
                     .short("k")
@@ -52,7 +52,7 @@ fn main(){
             )
         )
         .subcommand(SubCommand::with_name("delete")
-            .help("delete a key-value pair")
+            .about("Delete a key-value pair")
             .arg(
                 Arg::with_name("key")
                     .short("k")
