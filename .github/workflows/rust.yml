@@ -24,8 +24,9 @@ jobs:
         sudo apt install libdbus-1-dev
     - name: Build
       run: cargo build --verbose
-    release:
-      name: release ${{ matrix.target }}
+
+  release:
+    name: release ${{ matrix.target }}
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
