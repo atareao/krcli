@@ -1,5 +1,3 @@
-name: Rust
-
 on:
   push:
     tags:
@@ -31,78 +29,63 @@ jobs:
       matrix:
         config:
           # Linux
-          - {os: ubuntu-latest, toolchain: stable, target: x86_64-unknown-linux-gnu, target_cpu: generic, cross: false}
-          - {os: ubuntu-latest, toolchain: stable, target: x86_64-unknown-linux-gnu, target_cpu: broadwell, cross: false}
-          - {os: ubuntu-latest, toolchain: stable, target: aarch64-unknown-linux-gnu, target_cpu: generic, cross: true}
-          - {os: ubuntu-latest, toolchain: stable, target: arm-unknown-linux-gnueabi, target_cpu: generic, cross: true}
-          - {os: ubuntu-latest, toolchain: stable, target: armv7-unknown-linux-gnueabihf, target_cpu: generic, cross: true}
-          # mips and powerpc are not compitble with ring v0.16.10, so they are disabled for now
-#          - {os: ubuntu-latest, target: mips64el-unknown-linux-gnuabi64, cross: true}
-#          - {os: ubuntu-latest, target: powerpc64le-unknown-linux-gnu, cross: true}
-          - {os: ubuntu-latest, toolchain: stable,  target: x86_64-unknown-linux-musl, target_cpu: generic, cross: true}
-          - {os: ubuntu-latest, toolchain: stable,  target: x86_64-unknown-linux-musl, target_cpu: broadwell, cross: true}
-          - {os: ubuntu-latest, toolchain: stable, target: aarch64-linux-android, target_cpu: generic, cross: true}
+          - {os: ubuntu-latest, toolchain: stable, target: x86_64-unknown-linux-gnu, cross: false}
+          - {os: ubuntu-latest, toolchain: stable, target: aarch64-unknown-linux-gnu, cross: true}
+          - {os: ubuntu-latest, toolchain: stable, target: arm-unknown-linux-gnueabi, cross: true}
+          - {os: ubuntu-latest, toolchain: stable, target: armv7-unknown-linux-gnueabihf, cross: true}
+          # - {os: ubuntu-latest, toolchain: stable,  target: x86_64-unknown-linux-musl, cross: true}
+          # - {os: ubuntu-latest, toolchain: stable, target: aarch64-linux-android, cross: true}
           # Macos
-          # - {os: macos-latest, toolchain: stable, target: x86_64-apple-darwin, target_cpu: generic, cross: false}
-          # - {os: macos-latest, toolchain: stable, target: x86_64-apple-darwin, target_cpu: broadwell, cross: false}
+          # - {os: macos-latest, toolchain: stable, target: x86_64-apple-darwin, cross: false}
+          # - {os: macos-latest, toolchain: stable, target: x86_64-apple-darwin, cross: false}
           # Windows
-          # - {os: windows-latest, toolchain: stable-x86_64-pc-windows-gnu, target: x86_64-pc-windows-gnu, target_cpu: generic, cross: false}
-          # - {os: windows-latest, toolchain: stable-x86_64-pc-windows-msvc, target: x86_64-pc-windows-msvc, target_cpu: generic, cross: false}
-          # - {os: windows-latest, toolchain: stable-x86_64-pc-windows-gnu, target: x86_64-pc-windows-gnu, target_cpu: broadwell, cross: false}
-          # - {os: windows-latest, toolchain: stable-x86_64-pc-windows-msvc, target: x86_64-pc-windows-msvc, target_cpu: broadwell, cross: false}
+          # - {os: windows-latest, toolchain: stable-x86_64-pc-windows-gnu, target: x86_64-pc-windows-gnu, cross: false}
+          # - {os: windows-latest, toolchain: stable-x86_64-pc-windows-msvc, target: x86_64-pc-windows-msvc, cross: false}
+          # - {os: windows-latest, toolchain: stable-x86_64-pc-windows-gnu, target: x86_64-pc-windows-gnu, cross: false}
+          # - {os: windows-latest, toolchain: stable-x86_64-pc-windows-msvc, target: x86_64-pc-windows-msvc, cross: false}
     steps:
-      - uses: actions-rs/toolchain@v1
+      - name Install latest rust toolchain
+        uses: actions-rs/toolchain@v1
         with:
           toolchain: ${{ matrix.config.toolchain }}
           target: ${{ matrix.config.target }}
           override: true
           default: true
 
-      - name: Downgrade cross
-        uses: actions-rs/cargo@v1
-        if: ${{ matrix.config.cross }}
-        with:
-          command: install
-          args: --version 0.1.16 cross
+      - name: intall libdbus
+        run: |
+          sudo apt update
+          sudo apt install libdbus-1-dev
 
-      - name: Checkout code
-        uses: actions/checkout@v1
-        with:
-          submodules: true
+      - name: Checkout
+        uses: actions/checkout@v2
 
-      - name: Build jormungandr
+      - name: Build
         uses: actions-rs/cargo@v1
         with:
           use-cross: ${{ matrix.config.cross }}
-          command: rustc
-          args: --manifest-path jormungandr/Cargo.toml --release --target ${{ matrix.config.target }} --bin jormungandr --no-default-features -- -C target-cpu=${{ matrix.config.target_cpu }} -C lto
-
-      - name: Build jcli
-        uses: actions-rs/cargo@v1
-        with:
-          use-cross: ${{ matrix.config.cross }}
-          command: rustc
-          args: --manifest-path jcli/Cargo.toml --release --target ${{ matrix.config.target }} --bin jcli -- -C target-cpu=${{ matrix.config.target_cpu }} -C lto
+          command: build
+          args: --release --target ${{ matrix.config-target }}
 
       - name: Get tag version
         id: get_version
         run: echo ::set-output name=VERSION::``${GITHUB_REF#refs/tags/}``
         shell: bash
 
-      - name: Pack binaries if unix
+      - name: Pack binaries if unix as gzip
         if: matrix.config.os != 'windows-latest'
-        run: tar -C ./target/${{ matrix.config.target }}/release -czvf jormungandr-${{ steps.get_version.outputs.VERSION }}-${{ matrix.config.target }}-${{ matrix.config.target_cpu }}.tar.gz jormungandr jcli
+        run: tar -C ./target/${{ matrix.config.target }}/release -czvf krcli-${{ steps.get_version.outputs.VERSION }}-${{ matrix.config.target }}-${{ matrix.config.target_cpu }}.tar.gz krcli
 
       - name: Pack binaries if windows
         if: matrix.config.os == 'windows-latest'
-        run: compress-archive ./target/${{ matrix.config.target }}/release/jormungandr.exe, ./target/${{ matrix.config.target }}/release/jcli.exe jormungandr-${{ steps.get_version.outputs.VERSION }}-${{ matrix.config.target }}-${{ matrix.config.target_cpu }}.zip
+        run: compress-archive ./target/${{ matrix.config.target }}/release/krcli.exe krcli-${{ steps.get_version.outputs.VERSION }}-${{ matrix.config.target }}-${{ matrix.config.target_cpu }}.zip
 
       - name: Upload binaries to release
         uses: svenstaro/upload-release-action@v1-release
         with:
           repo_token: ${{ secrets.GITHUB_TOKEN }}
-          file: jormungandr-${{ steps.get_version.outputs.VERSION }}-${{ matrix.config.target }}-${{ matrix.config.target_cpu }}.*
-          asset_name: jormungandr-${{ steps.get_version.outputs.VERSION }}-${{ matrix.config.target }}-${{ matrix.config.target_cpu }}
+          file: krcli-${{ steps.get_version.outputs.VERSION }}-${{ matrix.config.target }}-${{ matrix.config.target_cpu }}.*
+          asset_name: krcli-${{ steps.get_version.outputs.VERSION }}-${{ matrix.config.target }}-${{ matrix.config.target_cpu }}
           tag: ${{ github.ref }}
           file_glob: true
           overwrite: true
