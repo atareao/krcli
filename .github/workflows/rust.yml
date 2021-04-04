@@ -2,78 +2,107 @@ name: Rust
 
 on:
   push:
-    branches: [ main ]
-  pull_request:
-    branches: [ main ]
-  release:
-    types: [created]
+    tags:
+      - 'v[0-9]+.*' # Push events to matching v*, i.e. v1.0, v20.15.10
 
-env:
-  CARGO_TERM_COLOR: always
+name: Release
 
 jobs:
-  build_for_linux:
-    name: Linux
+  initial_release:
+    name: Create base release
     runs-on: ubuntu-latest
-
     steps:
-      - name: checkout
-        uses: actions/checkout@master
+      - name: Create Release
+        id: create_release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # This token is provided by Actions, you do not need to create your own token
+        with:
+          tag_name: ${{ github.ref }}
+          release_name: Release ${{ github.ref }}
+          draft: false
+          prerelease: false
 
-      - name: intall libdbus
-        run: |
-          sudo apt update
-          sudo apt install libdbus-1-dev
+  release_assets:
+    name: Release assets
+    runs-on: ${{ matrix.config.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        config:
+          # Linux
+          - {os: ubuntu-latest, toolchain: stable, target: x86_64-unknown-linux-gnu, target_cpu: generic, cross: false}
+          - {os: ubuntu-latest, toolchain: stable, target: x86_64-unknown-linux-gnu, target_cpu: broadwell, cross: false}
+          - {os: ubuntu-latest, toolchain: stable, target: aarch64-unknown-linux-gnu, target_cpu: generic, cross: true}
+          - {os: ubuntu-latest, toolchain: stable, target: arm-unknown-linux-gnueabi, target_cpu: generic, cross: true}
+          - {os: ubuntu-latest, toolchain: stable, target: armv7-unknown-linux-gnueabihf, target_cpu: generic, cross: true}
+          # mips and powerpc are not compitble with ring v0.16.10, so they are disabled for now
+#          - {os: ubuntu-latest, target: mips64el-unknown-linux-gnuabi64, cross: true}
+#          - {os: ubuntu-latest, target: powerpc64le-unknown-linux-gnu, cross: true}
+          - {os: ubuntu-latest, toolchain: stable,  target: x86_64-unknown-linux-musl, target_cpu: generic, cross: true}
+          - {os: ubuntu-latest, toolchain: stable,  target: x86_64-unknown-linux-musl, target_cpu: broadwell, cross: true}
+          - {os: ubuntu-latest, toolchain: stable, target: aarch64-linux-android, target_cpu: generic, cross: true}
+          # Macos
+          # - {os: macos-latest, toolchain: stable, target: x86_64-apple-darwin, target_cpu: generic, cross: false}
+          # - {os: macos-latest, toolchain: stable, target: x86_64-apple-darwin, target_cpu: broadwell, cross: false}
+          # Windows
+          # - {os: windows-latest, toolchain: stable-x86_64-pc-windows-gnu, target: x86_64-pc-windows-gnu, target_cpu: generic, cross: false}
+          # - {os: windows-latest, toolchain: stable-x86_64-pc-windows-msvc, target: x86_64-pc-windows-msvc, target_cpu: generic, cross: false}
+          # - {os: windows-latest, toolchain: stable-x86_64-pc-windows-gnu, target: x86_64-pc-windows-gnu, target_cpu: broadwell, cross: false}
+          # - {os: windows-latest, toolchain: stable-x86_64-pc-windows-msvc, target: x86_64-pc-windows-msvc, target_cpu: broadwell, cross: false}
+    steps:
+      - uses: actions-rs/toolchain@v1
+        with:
+          toolchain: ${{ matrix.config.toolchain }}
+          target: ${{ matrix.config.target }}
+          override: true
+          default: true
 
-      - name: Build
+      - name: Downgrade cross
+        uses: actions-rs/cargo@v1
+        if: ${{ matrix.config.cross }}
+        with:
+          command: install
+          args: --version 0.1.16 cross
+
+      - name: Checkout code
+        uses: actions/checkout@v1
+        with:
+          submodules: true
+
+      - name: Build jormungandr
         uses: actions-rs/cargo@v1
         with:
-          command: build
-          args: --release
+          use-cross: ${{ matrix.config.cross }}
+          command: rustc
+          args: --manifest-path jormungandr/Cargo.toml --release --target ${{ matrix.config.target }} --bin jormungandr --no-default-features -- -C target-cpu=${{ matrix.config.target_cpu }} -C lto
 
-      - name: Rename binary
-        run: mv target/release/krcli krcli-linux-amd64
-
-      - name: Upload to release
-        uses: JasonEtco/upload-to-release@d648f1babf776de9cad881320bd9e9818fc3b262
+      - name: Build jcli
+        uses: actions-rs/cargo@v1
         with:
-          args: krcli-linux-amd64 application/octet-stream
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-  build:
-    runs-on: ubuntu-latest
+          use-cross: ${{ matrix.config.cross }}
+          command: rustc
+          args: --manifest-path jcli/Cargo.toml --release --target ${{ matrix.config.target }} --bin jcli -- -C target-cpu=${{ matrix.config.target_cpu }} -C lto
 
-    steps:
-    - name: Checkout
-      uses: actions/checkout@v2
+      - name: Get tag version
+        id: get_version
+        run: echo ::set-output name=VERSION::``${GITHUB_REF#refs/tags/}``
+        shell: bash
 
-    - name: Install latest rust toolchain
-      uses: actions-rs/toolchain@v1
-      with:
-        toolchain: stable
-        default: true
-        override: true
+      - name: Pack binaries if unix
+        if: matrix.config.os != 'windows-latest'
+        run: tar -C ./target/${{ matrix.config.target }}/release -czvf jormungandr-${{ steps.get_version.outputs.VERSION }}-${{ matrix.config.target }}-${{ matrix.config.target_cpu }}.tar.gz jormungandr jcli
 
-    - name: intall libdbus
-      run: |
-        sudo apt update
-        sudo apt install libdbus-1-dev
+      - name: Pack binaries if windows
+        if: matrix.config.os == 'windows-latest'
+        run: compress-archive ./target/${{ matrix.config.target }}/release/jormungandr.exe, ./target/${{ matrix.config.target }}/release/jcli.exe jormungandr-${{ steps.get_version.outputs.VERSION }}-${{ matrix.config.target }}-${{ matrix.config.target_cpu }}.zip
 
-    - name: Build
-      run: cargo build --verbose --all --release
-
-    - name: Bump version and push tag/create release point
-      uses: anothrNick/github-tag-action@1.17.2
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        WITH_V: true
-      id: bump_version
-
-    - name: Release
-      uses: svenstaro/upload-release-action@v1-release 
-      with:
-        repo_token: ${{ secrets.GITHUB_TOKEN }}
-        file: target/release/krcli
-        asset_name: krcli-linux-amd64
-        tag: ${{ steps.bump_version.outputs.new_tag }}
-        overwrite: true
+      - name: Upload binaries to release
+        uses: svenstaro/upload-release-action@v1-release
+        with:
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          file: jormungandr-${{ steps.get_version.outputs.VERSION }}-${{ matrix.config.target }}-${{ matrix.config.target_cpu }}.*
+          asset_name: jormungandr-${{ steps.get_version.outputs.VERSION }}-${{ matrix.config.target }}-${{ matrix.config.target_cpu }}
+          tag: ${{ github.ref }}
+          file_glob: true
+          overwrite: true
