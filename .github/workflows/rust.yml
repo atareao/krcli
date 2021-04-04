@@ -89,3 +89,9 @@ jobs:
           tag: ${{ github.ref }}
           file_glob: true
           overwrite: true
+
+      - name: Archive production artifacts
+        uses: actions/upload-artifact@v2
+        with:
+          name: package
+          path: krcli-${{ steps.get_version.outputs.VERSION }}-${{ matrix.config.target }}.*
