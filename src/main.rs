@@ -1,9 +1,11 @@
 use clap::{App, Arg, SubCommand};
+use clap::AppSettings;
 use keyring::Keyring;
 use exitcode;
 
 fn main(){
     let matches = App::new(env!("CARGO_PKG_NAME"))
+        .setting(AppSettings::ArgRequiredElseHelp)
         .version(env!("CARGO_PKG_VERSION"))
         .author(env!("CARGO_PKG_AUTHORS"))
         .about(env!("CARGO_PKG_DESCRIPTION"))
